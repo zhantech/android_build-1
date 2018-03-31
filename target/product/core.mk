@@ -22,51 +22,36 @@
 
 PRODUCT_PACKAGES += \
     BasicDreams \
-    BlockedNumberProvider \
-    BookmarkProvider \
-    BuiltInPrintService \
+    Browser \
     Calendar \
     CalendarProvider \
     CaptivePortalLogin \
     CertInstaller \
     Contacts \
+    DeskClock2 \
     DocumentsUI \
     DownloadProviderUi \
     Email \
     ExactCalculator \
+    Exchange2 \
     ExternalStorageProvider \
     FusedLocation \
     InputDevices \
     KeyChain \
     Keyguard \
     LatinIME \
-    Launcher3 \
+    Launcher2 \
     ManagedProvisioning \
-    MtpDocumentsProvider \
     PicoTts \
     PacProcessor \
     libpac \
     PrintSpooler \
-    PrintRecommendationService \
     ProxyHandler \
-    QuickSearchBox \
     Settings \
     SharedStorageBackup \
-    StorageManager \
     Telecom \
     TeleService \
     VpnDialogs \
-    vr \
     MmsService
-
-# The set of packages whose code can be loaded by the system server.
-PRODUCT_SYSTEM_SERVER_APPS += \
-    FusedLocation \
-    InputDevices \
-    KeyChain \
-    Telecom \
-
-# The set of packages we want to force 'speed' compilation on.
-PRODUCT_DEXPREOPT_SPEED_APPS += \
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_base.mk)

@@ -26,12 +26,10 @@ Usage:  img_from_target_files [flags] input_target_files output_image_zip
 
 """
 
-from __future__ import print_function
-
 import sys
 
 if sys.hexversion < 0x02070000:
-  print("Python 2.7 or newer is required.", file=sys.stderr)
+  print >> sys.stderr, "Python 2.7 or newer is required."
   sys.exit(1)
 
 import os
@@ -71,30 +69,75 @@ def main(argv):
     common.Usage(__doc__)
     sys.exit(1)
 
-  OPTIONS.input_tmp, input_zip = common.UnzipTemp(
-      args[0], ["IMAGES/*", "OTA/*"])
+  OPTIONS.input_tmp, input_zip = common.UnzipTemp(args[0])
   output_zip = zipfile.ZipFile(args[1], "w", compression=zipfile.ZIP_DEFLATED)
   CopyInfo(output_zip)
 
   try:
+    done = False
     images_path = os.path.join(OPTIONS.input_tmp, "IMAGES")
-    # A target-files zip must contain the images since Lollipop.
-    assert os.path.exists(images_path)
-    for image in sorted(os.listdir(images_path)):
-      if bootable_only and image not in ("boot.img", "recovery.img"):
-        continue
-      if not image.endswith(".img"):
-        continue
-      if image == "recovery-two-step.img":
-        continue
-      common.ZipWrite(output_zip, os.path.join(images_path, image), image)
+    if os.path.exists(images_path):
+      # If this is a new target-files, it already contains the images,
+      # and all we have to do is copy them to the output zip.
+      images = os.listdir(images_path)
+      if images:
+        for image in images:
+          if bootable_only and image not in ("boot.img", "recovery.img"):
+            continue
+          if not image.endswith(".img"):
+            continue
+          common.ZipWrite(
+              output_zip, os.path.join(images_path, image), image)
+        done = True
+
+    if not done:
+      # We have an old target-files that doesn't already contain the
+      # images, so build them.
+      import add_img_to_target_files
+
+      OPTIONS.info_dict = common.LoadInfoDict(input_zip)
+
+      # If this image was originally labelled with SELinux contexts,
+      # make sure we also apply the labels in our new image. During
+      # building, the "file_contexts" is in the out/ directory tree,
+      # but for repacking from target-files.zip it's in the root
+      # directory of the ramdisk.
+      if "selinux_fc" in OPTIONS.info_dict:
+        OPTIONS.info_dict["selinux_fc"] = os.path.join(
+            OPTIONS.input_tmp, "BOOT", "RAMDISK", "file_contexts")
+
+      boot_image = common.GetBootableImage(
+          "boot.img", "boot.img", OPTIONS.input_tmp, "BOOT")
+      if boot_image:
+        boot_image.AddToZip(output_zip)
+      recovery_image = common.GetBootableImage(
+          "recovery.img", "recovery.img", OPTIONS.input_tmp, "RECOVERY")
+      if recovery_image:
+        recovery_image.AddToZip(output_zip)
+
+      def banner(s):
+        print "\n\n++++ " + s + " ++++\n\n"
+
+      if not bootable_only:
+        banner("AddSystem")
+        add_img_to_target_files.AddSystem(output_zip, prefix="")
+        try:
+          input_zip.getinfo("VENDOR/")
+          banner("AddVendor")
+          add_img_to_target_files.AddVendor(output_zip, prefix="")
+        except KeyError:
+          pass   # no vendor partition for this device
+        banner("AddUserdata")
+        add_img_to_target_files.AddUserdata(output_zip, prefix="")
+        banner("AddCache")
+        add_img_to_target_files.AddCache(output_zip, prefix="")
 
   finally:
-    print("cleaning up...")
+    print "cleaning up..."
     common.ZipClose(output_zip)
     shutil.rmtree(OPTIONS.input_tmp)
 
-  print("done.")
+  print "done."
 
 
 if __name__ == '__main__':
@@ -102,5 +145,7 @@ if __name__ == '__main__':
     common.CloseInheritedPipes()
     main(sys.argv[1:])
   except common.ExternalError as e:
-    print("\n   ERROR: %s\n" % (e,))
+    print
+    print "   ERROR: %s" % (e,)
+    print
     sys.exit(1)

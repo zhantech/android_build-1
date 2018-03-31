@@ -1,24 +1,11 @@
 ###########################################################
 ## Track NOTICE files
 ###########################################################
-$(call record-module-type,NOTICE_FILE)
 
-ifneq ($(LOCAL_NOTICE_FILE),)
-notice_file:=$(strip $(LOCAL_NOTICE_FILE))
-else
 notice_file:=$(strip $(wildcard $(LOCAL_PATH)/NOTICE))
-endif
 
 ifeq ($(LOCAL_MODULE_CLASS),GYP)
   # We ignore NOTICE files for modules of type GYP.
-  notice_file :=
-endif
-
-# Soong generates stub libraries that don't need NOTICE files
-ifdef LOCAL_NO_NOTICE_FILE
-  ifneq ($(LOCAL_MODULE_MAKEFILE),$(SOONG_ANDROID_MK))
-    $(call pretty-error,LOCAL_NO_NOTICE_FILE should not be used by Android.mk files)
-  endif
   notice_file :=
 endif
 
@@ -27,7 +14,6 @@ ifeq ($(LOCAL_MODULE_CLASS),NOTICE_FILES)
 # so my_prefix is not set at this point.
 ifeq ($(LOCAL_IS_HOST_MODULE),true)
   my_prefix := HOST_
-  LOCAL_HOST_PREFIX :=
 else
   my_prefix := TARGET_
 endif
@@ -41,15 +27,15 @@ ifdef notice_file
 # compliance.
 # Includes the leading slash
 ifdef LOCAL_INSTALLED_MODULE
-  module_installed_filename := $(patsubst $(PRODUCT_OUT)/%,%,$(LOCAL_INSTALLED_MODULE))
+  module_installed_filename := $(patsubst $(PRODUCT_OUT)%,%,$(LOCAL_INSTALLED_MODULE))
 else
   # This module isn't installable
-  ifneq ($(filter STATIC_LIBRARIES HEADER_LIBRARIES,$(LOCAL_MODULE_CLASS)),)
+  ifeq ($(LOCAL_MODULE_CLASS),STATIC_LIBRARIES)
     # Stick the static libraries with the dynamic libraries.
     # We can't use xxx_OUT_STATIC_LIBRARIES because it points into
     # device-obj or host-obj.
     module_installed_filename := \
-        $(patsubst $(PRODUCT_OUT)/%,%,$($(LOCAL_2ND_ARCH_VAR_PREFIX)$(my_prefix)OUT_SHARED_LIBRARIES))/$(notdir $(LOCAL_BUILT_MODULE))
+        $(patsubst $(PRODUCT_OUT)%,%,$($(LOCAL_2ND_ARCH_VAR_PREFIX)$(my_prefix)OUT_SHARED_LIBRARIES))/$(notdir $(LOCAL_BUILT_MODULE))
   else
     ifeq ($(LOCAL_MODULE_CLASS),JAVA_LIBRARIES)
       # Stick the static java libraries with the regular java libraries.
@@ -61,7 +47,7 @@ else
         module_leaf := $(LOCAL_MODULE).jar
       endif
       module_installed_filename := \
-          $(patsubst $(PRODUCT_OUT)/%,%,$($(my_prefix)OUT_JAVA_LIBRARIES))/$(module_leaf)
+          $(patsubst $(PRODUCT_OUT)%,%,$($(my_prefix)OUT_JAVA_LIBRARIES))/$(module_leaf)
     else
       $(error Cannot determine where to install NOTICE file for $(LOCAL_MODULE))
     endif # JAVA_LIBRARIES
@@ -69,15 +55,14 @@ else
 endif
 
 # In case it's actually a host file
-module_installed_filename := $(patsubst $(HOST_OUT)/%,%,$(module_installed_filename))
-module_installed_filename := $(patsubst $(HOST_CROSS_OUT)/%,%,$(module_installed_filename))
+module_installed_filename := $(patsubst $(HOST_OUT)%,%,$(module_installed_filename))
 
 installed_notice_file := $($(my_prefix)OUT_NOTICE_FILES)/src/$(module_installed_filename).txt
 
 $(installed_notice_file): PRIVATE_INSTALLED_MODULE := $(module_installed_filename)
 
 $(installed_notice_file): $(notice_file)
-	@echo Notice file: $< -- $@
+	@echo -e ${PRT_IMP}Notice file:${CL_RST} $< -- $@
 	$(hide) mkdir -p $(dir $@)
 	$(hide) cat $< > $@
 

@@ -22,11 +22,13 @@ PRODUCT_PACKAGES := \
     BluetoothMidiService \
     Camera2 \
     Gallery2 \
+    InputDevices \
+    Keyguard \
+    LatinIME \
+    Launcher3 \
     OneTimeInitializer \
     Provision \
     SystemUI \
-    SysuiDarkThemeOverlay \
-    EasterEgg \
     WallpaperCropper
 
 PRODUCT_PACKAGES += \
@@ -36,21 +38,19 @@ PRODUCT_PACKAGES += \
     screenrecord
 
 PRODUCT_PACKAGES += \
-    librs_jni \
-    libvideoeditor_jni \
-    libvideoeditor_core \
-    libvideoeditor_osal \
-    libvideoeditor_videofilters \
-    libvideoeditorplayer \
+    librs_jni
 
 PRODUCT_PACKAGES += \
     audio.primary.default \
+    audio_policy.default \
     local_time.default \
     vibrator.default \
     power.default
 
+ifneq ($(TARGET_USE_DEVICE_AUDIO_EFFECTS_CONF),true)
 PRODUCT_COPY_FILES := \
         frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf
+endif
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.carrier=unknown
@@ -61,6 +61,7 @@ $(call inherit-product-if-exists, external/google-fonts/carrois-gothic-sc/fonts.
 $(call inherit-product-if-exists, external/google-fonts/coming-soon/fonts.mk)
 $(call inherit-product-if-exists, external/google-fonts/cutive-mono/fonts.mk)
 $(call inherit-product-if-exists, external/noto-fonts/fonts.mk)
+$(call inherit-product-if-exists, external/naver-fonts/fonts.mk)
 $(call inherit-product-if-exists, external/roboto-fonts/fonts.mk)
 $(call inherit-product-if-exists, external/hyphenation-patterns/patterns.mk)
 $(call inherit-product-if-exists, frameworks/base/data/keyboards/keyboards.mk)

@@ -3,3 +3,11 @@
 
 ARCH_MIPS_HAS_FPU	:=true
 ARCH_HAVE_ALIGNED_DOUBLES :=true
+arch_variant_cflags := \
+    -mips32r2 \
+    -mfp32 \
+    -modd-spreg \
+    -msynci
+
+arch_variant_ldflags := \
+    -Wl,-melf32ltsmip

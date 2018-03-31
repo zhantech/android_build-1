@@ -1,4 +1,3 @@
-$(call record-module-type,STATIC_LIBRARY)
 my_prefix := TARGET_
 include $(BUILD_SYSTEM)/multilib.mk
 
@@ -24,6 +23,9 @@ ifeq ($(my_module_arch_supported),true)
 OVERRIDE_BUILT_MODULE_PATH :=
 LOCAL_BUILT_MODULE :=
 LOCAL_INSTALLED_MODULE :=
+LOCAL_MODULE_STEM :=
+LOCAL_BUILT_MODULE_STEM :=
+LOCAL_INSTALLED_MODULE_STEM :=
 LOCAL_INTERMEDIATE_TARGETS :=
 
 include $(BUILD_SYSTEM)/static_library_internal.mk

@@ -31,21 +31,18 @@ PRODUCT_PACKAGES += \
 
 PRODUCT_PACKAGES += \
     audio.primary.default \
+    audio_policy.default \
     local_time.default \
     power.default
 
 PRODUCT_PACKAGES += \
+    local_time.default
+
+PRODUCT_PACKAGES += \
     BackupRestoreConfirmation \
-    CtsShimPrebuilt \
-    CtsShimPrivPrebuilt \
     DefaultContainerService \
-    ExtShared \
-    ExtServices \
     SettingsProvider \
     Shell \
-    WallpaperBackup \
-    android.hidl.base-V1.0-java \
-    android.hidl.manager-V1.0-java \
     bcc \
     bu \
     com.android.location.provider \
@@ -61,20 +58,19 @@ PRODUCT_PACKAGES += \
     keystore \
     keystore.default \
     ld.mc \
-    libaaudio \
     libOpenMAXAL \
     libOpenSLES \
     libdownmix \
     libfilterfw \
     libgatekeeper \
     libkeystore \
+    libsqlite_jni \
     libwilhelm \
     libdrmframework_jni \
     libdrmframework \
     make_ext4fs \
     e2fsck \
     resize2fs \
-    tune2fs \
     nullwebview \
     screencap \
     sensorservice \
@@ -83,44 +79,28 @@ PRODUCT_PACKAGES += \
     telephony-common \
     voip-common \
     logd \
-
-# Wifi modules
-PRODUCT_PACKAGES += \
-    wifi-service \
-    wificond \
-
-ifeq ($(TARGET_CORE_JARS),)
-$(error TARGET_CORE_JARS is empty; cannot initialize PRODUCT_BOOT_JARS variable)
-endif
+    wifi-service
 
 # The order matters
 PRODUCT_BOOT_JARS := \
-    $(TARGET_CORE_JARS) \
-    legacy-test \
+    core-libart \
+    conscrypt \
+    okhttp \
+    core-junit \
+    bouncycastle \
     ext \
     framework \
     telephony-common \
     voip-common \
     ims-common \
+    apache-xml \
     nullwebview \
-    org.apache.http.legacy.boot \
-    android.hidl.base-V1.0-java \
-    android.hidl.manager-V1.0-java
+    org.apache.http.legacy.boot
 
 # The order of PRODUCT_SYSTEM_SERVER_JARS matters.
 PRODUCT_SYSTEM_SERVER_JARS := \
     services \
     wifi-service
-
-# The set of packages whose code can be loaded by the system server.
-PRODUCT_SYSTEM_SERVER_APPS += \
-    FusedLocation \
-    InputDevices \
-    SettingsProvider \
-    WallpaperBackup \
-
-# The set of packages we want to force 'speed' compilation on.
-PRODUCT_DEXPREOPT_SPEED_APPS := \
 
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES += \
     ro.zygote=zygote32

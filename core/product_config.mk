@@ -74,7 +74,7 @@ endif
 ###########################################################
 
 define find-copy-subdir-files
-$(sort $(shell find $(2) -name "$(1)" -type f | $(SED_EXTENDED) "s:($(2)/?(.*)):\\1\\:$(3)/\\2:" | sed "s://:/:g"))
+$(shell find $(2) -name "$(1)" | $(SED_EXTENDED) "s:($(2)/?(.*)):\\1\\:$(3)/\\2:" | sed "s://:/:g")
 endef
 
 # ---------------------------------------------------------------
@@ -88,7 +88,6 @@ INTERNAL_VALID_VARIANTS := user userdebug eng
 # Provide "PRODUCT-<prodname>-<goal>" targets, which lets you build
 # a particular configuration without needing to set up the environment.
 #
-ifndef KATI
 product_goals := $(strip $(filter PRODUCT-%,$(MAKECMDGOALS)))
 ifdef product_goals
   # Scrape the product and build names out of the goal,
@@ -114,42 +113,54 @@ ifdef product_goals
     $(error "tests" has been deprecated as a build variant. Use it as a build goal instead.)
   endif
 
-  # The build server wants to do make PRODUCT-dream-sdk
-  # which really means TARGET_PRODUCT=dream make sdk.
+  # The build server wants to do make PRODUCT-dream-installclean
+  # which really means TARGET_PRODUCT=dream make installclean.
   ifneq ($(filter-out $(INTERNAL_VALID_VARIANTS),$(TARGET_BUILD_VARIANT)),)
-    override MAKECMDGOALS := $(MAKECMDGOALS) $(TARGET_BUILD_VARIANT)
+    MAKECMDGOALS := $(MAKECMDGOALS) $(TARGET_BUILD_VARIANT)
     TARGET_BUILD_VARIANT := userdebug
     default_goal_substitution :=
   else
-    default_goal_substitution := droid
+    default_goal_substitution := $(DEFAULT_GOAL)
   endif
 
   # Replace the PRODUCT-* goal with the build goal that it refers to.
   # Note that this will ensure that it appears in the same relative
   # position, in case it matters.
-  override MAKECMDGOALS := $(patsubst $(goal_name),$(default_goal_substitution),$(MAKECMDGOALS))
+  #
+  # Note that modifying this will not affect the goals that make will
+  # attempt to build, but it's important because we inspect this value
+  # in certain situations (like for "make sdk").
+  #
+  MAKECMDGOALS := $(patsubst $(goal_name),$(default_goal_substitution),$(MAKECMDGOALS))
+
+  # Define a rule for the PRODUCT-* goal, and make it depend on the
+  # patched-up command-line goals as well as any other goals that we
+  # want to force.
+  #
+.PHONY: $(goal_name)
+$(goal_name): $(MAKECMDGOALS)
 endif
-endif # !KATI
 # else: Use the value set in the environment or buildspec.mk.
 
 # ---------------------------------------------------------------
 # Provide "APP-<appname>" targets, which lets you build
 # an unbundled app.
 #
-ifndef KATI
 unbundled_goals := $(strip $(filter APP-%,$(MAKECMDGOALS)))
 ifdef unbundled_goals
   ifneq ($(words $(unbundled_goals)),1)
-    $(error Only one APP-* goal may be specified; saw "$(unbundled_goals)")
+    $(error Only one APP-* goal may be specified; saw "$(unbundled_goals)"))
   endif
   TARGET_BUILD_APPS := $(strip $(subst -, ,$(patsubst APP-%,%,$(unbundled_goals))))
-  ifneq ($(filter droid,$(MAKECMDGOALS)),)
-    override MAKECMDGOALS := $(patsubst $(unbundled_goals),,$(MAKECMDGOALS))
+  ifneq ($(filter $(DEFAULT_GOAL),$(MAKECMDGOALS)),)
+    MAKECMDGOALS := $(patsubst $(unbundled_goals),,$(MAKECMDGOALS))
   else
-    override MAKECMDGOALS := $(patsubst $(unbundled_goals),droid,$(MAKECMDGOALS))
+    MAKECMDGOALS := $(patsubst $(unbundled_goals),$(DEFAULT_GOAL),$(MAKECMDGOALS))
   endif
+
+.PHONY: $(unbundled_goals)
+$(unbundled_goals): $(MAKECMDGOALS)
 endif # unbundled_goals
-endif
 
 # Default to building dalvikvm on hosts that support it...
 ifeq ($(HOST_OS),linux)
@@ -178,8 +189,6 @@ else
 all_product_configs := $(get-all-product-makefiles)
 endif
 
-all_named_products :=
-
 # Find the product config makefile for the current product.
 # all_product_configs consists items like:
 # <product_name>:<path_to_the_product_makefile>
@@ -193,11 +202,9 @@ $(foreach f, $(all_product_configs),\
     $(eval _cpm_word2 := $(word 2,$(_cpm_words)))\
     $(if $(_cpm_word2),\
         $(eval all_product_makefiles += $(_cpm_word2))\
-        $(eval all_named_products += $(_cpm_word1))\
         $(if $(filter $(TARGET_PRODUCT),$(_cpm_word1)),\
             $(eval current_product_makefile += $(_cpm_word2)),),\
         $(eval all_product_makefiles += $(f))\
-        $(eval all_named_products += $(basename $(notdir $(f))))\
         $(if $(filter $(TARGET_PRODUCT),$(basename $(notdir $(f)))),\
             $(eval current_product_makefile += $(f)),)))
 _cpm_words :=
@@ -206,19 +213,7 @@ _cpm_word2 :=
 current_product_makefile := $(strip $(current_product_makefile))
 all_product_makefiles := $(strip $(all_product_makefiles))
 
-load_all_product_makefiles :=
-ifneq (,$(filter product-graph, $(MAKECMDGOALS)))
-ifeq ($(ANDROID_PRODUCT_GRAPH),--all)
-load_all_product_makefiles := true
-endif
-endif
-ifneq (,$(filter dump-products,$(MAKECMDGOALS)))
-ifeq ($(ANDROID_DUMP_PRODUCTS),all)
-load_all_product_makefiles := true
-endif
-endif
-
-ifeq ($(load_all_product_makefiles),true)
+ifneq (,$(filter product-graph dump-products, $(MAKECMDGOALS)))
 # Import all product makefiles.
 $(call import-products, $(all_product_makefiles))
 else
@@ -257,11 +252,6 @@ all_product_configs :=
 # A list of module names of BOOTCLASSPATH (jar files)
 PRODUCT_BOOT_JARS := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_BOOT_JARS))
 PRODUCT_SYSTEM_SERVER_JARS := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SYSTEM_SERVER_JARS))
-PRODUCT_SYSTEM_SERVER_APPS := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SYSTEM_SERVER_APPS))
-PRODUCT_DEXPREOPT_SPEED_APPS := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEXPREOPT_SPEED_APPS))
-
-# All of the apps that we force preopt, this overrides WITH_DEXPREOPT.
-PRODUCT_ALWAYS_PREOPT_EXTRACTED_APK := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_ALWAYS_PREOPT_EXTRACTED_APK))
 
 # Find the device that this product maps to.
 TARGET_DEVICE := $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEVICE)
@@ -297,11 +287,9 @@ PRODUCT_AAPT_CONFIG := \
 
 # product-scoped aapt flags
 PRODUCT_AAPT_FLAGS :=
-PRODUCT_AAPT2_CFLAGS :=
 ifneq ($(filter en_XA ar_XB,$(PRODUCT_LOCALES)),)
-  # Force generating resources for pseudo-locales.
-  PRODUCT_AAPT2_CFLAGS += --pseudo-localize
-  PRODUCT_AAPT_FLAGS += --pseudo-localize
+# Force generating resources for pseudo-locales.
+PRODUCT_AAPT_FLAGS += --pseudo-localize
 endif
 
 PRODUCT_BRAND := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_BRAND))
@@ -348,23 +336,15 @@ PRODUCT_COPY_FILES := \
 # whitespace characters on either side of the '='.
 PRODUCT_PROPERTY_OVERRIDES := \
     $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_PROPERTY_OVERRIDES))
-.KATI_READONLY := PRODUCT_PROPERTY_OVERRIDES
-
-PRODUCT_SHIPPING_API_LEVEL := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SHIPPING_API_LEVEL))
 
 # A list of property assignments, like "key = value", with zero or more
 # whitespace characters on either side of the '='.
 # used for adding properties to default.prop
 PRODUCT_DEFAULT_PROPERTY_OVERRIDES := \
     $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEFAULT_PROPERTY_OVERRIDES))
-.KATI_READONLY := PRODUCT_DEFAULT_PROPERTY_OVERRIDES
 
-# A list of property assignments, like "key = value", with zero or more
-# whitespace characters on either side of the '='.
-# used for overriding properties in build.prop
 PRODUCT_BUILD_PROP_OVERRIDES := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_BUILD_PROP_OVERRIDES))
-.KATI_READONLY := PRODUCT_BUILD_PROP_OVERRIDES
+	$(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_BUILD_PROP_OVERRIDES))
 
 # Should we use the default resources or add any product specific overlays
 PRODUCT_PACKAGE_OVERLAYS := \
@@ -375,6 +355,11 @@ DEVICE_PACKAGE_OVERLAYS := \
 # The list of product-specific kernel header dirs
 PRODUCT_VENDOR_KERNEL_HEADERS := \
     $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_VENDOR_KERNEL_HEADERS)
+
+# Add the product-defined properties to the build properties.
+ADDITIONAL_BUILD_PROPERTIES := \
+    $(ADDITIONAL_BUILD_PROPERTIES) \
+    $(PRODUCT_PROPERTY_OVERRIDES)
 
 # The OTA key(s) specified by the product config, if any.  The names
 # of these keys are stored in the target-files zip so that post-build
@@ -390,21 +375,7 @@ PRODUCT_DEX_PREOPT_DEFAULT_FLAGS := \
     $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEX_PREOPT_DEFAULT_FLAGS))
 PRODUCT_DEX_PREOPT_BOOT_FLAGS := \
     $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEX_PREOPT_BOOT_FLAGS))
-PRODUCT_DEX_PREOPT_PROFILE_DIR := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEX_PREOPT_PROFILE_DIR))
-
-# Boot image options.
-PRODUCT_USE_PROFILE_FOR_BOOT_IMAGE := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_USE_PROFILE_FOR_BOOT_IMAGE))
-PRODUCT_DEX_PREOPT_BOOT_IMAGE_PROFILE_LOCATION := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEX_PREOPT_BOOT_IMAGE_PROFILE_LOCATION))
-
-PRODUCT_SYSTEM_SERVER_COMPILER_FILTER := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SYSTEM_SERVER_COMPILER_FILTER))
-PRODUCT_SYSTEM_SERVER_DEBUG_INFO := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SYSTEM_SERVER_DEBUG_INFO))
-
-# Resolve and setup per-module dex-preopt configs.
+# Resolve and setup per-module dex-preopot configs.
 PRODUCT_DEX_PREOPT_MODULE_CONFIGS := \
     $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEX_PREOPT_MODULE_CONFIGS))
 # If a module has multiple setups, the first takes precedence.
@@ -417,49 +388,3 @@ $(foreach c,$(PRODUCT_DEX_PREOPT_MODULE_CONFIGS),\
     $(eval cf := $(subst $(_PDPMC_SP_PLACE_HOLDER),$(space),$(cf)))\
     $(eval DEXPREOPT.$(TARGET_PRODUCT).$(m).CONFIG := $(cf))))
 _pdpmc_modules :=
-
-# Resolve and setup per-module sanitizer configs.
-PRODUCT_SANITIZER_MODULE_CONFIGS := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SANITIZER_MODULE_CONFIGS))
-# If a module has multiple setups, the first takes precedence.
-_psmc_modules :=
-$(foreach c,$(PRODUCT_SANITIZER_MODULE_CONFIGS),\
-  $(eval m := $(firstword $(subst =,$(space),$(c))))\
-  $(if $(filter $(_psmc_modules),$(m)),,\
-    $(eval _psmc_modules += $(m))\
-    $(eval cf := $(patsubst $(m)=%,%,$(c)))\
-    $(eval cf := $(subst $(_PSMC_SP_PLACE_HOLDER),$(space),$(cf)))\
-    $(eval SANITIZER.$(TARGET_PRODUCT).$(m).CONFIG := $(cf))))
-_psmc_modules :=
-
-# Whether the product wants to ship libartd. For rules and meaning, see art/Android.mk.
-PRODUCT_ART_TARGET_INCLUDE_DEBUG_BUILD := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_ART_TARGET_INCLUDE_DEBUG_BUILD))
-
-# Make this art variable visible to soong_config.mk.
-PRODUCT_ART_USE_READ_BARRIER := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_ART_USE_READ_BARRIER))
-
-# Whether the product is an Android Things variant.
-PRODUCT_IOT := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_IOT))
-
-# Resource overlay list which must be excluded from enforcing RRO.
-PRODUCT_ENFORCE_RRO_EXCLUDED_OVERLAYS := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_ENFORCE_RRO_EXCLUDED_OVERLAYS))
-
-# Package list to apply enforcing RRO.
-PRODUCT_ENFORCE_RRO_TARGETS := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_ENFORCE_RRO_TARGETS))
-
-# Add reserved headroom to a system image.
-PRODUCT_SYSTEM_HEADROOM := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_SYSTEM_HEADROOM))
-
-# Whether to save disk space by minimizing java debug info
-PRODUCT_MINIMIZE_JAVA_DEBUG_INFO := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_MINIMIZE_JAVA_DEBUG_INFO))
-
-# Whether any paths are excluded from sanitization when SANITIZE_TARGET=integer_overflow
-PRODUCT_INTEGER_OVERFLOW_EXCLUDE_PATHS := \
-    $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_INTEGER_OVERFLOW_EXCLUDE_PATHS))
